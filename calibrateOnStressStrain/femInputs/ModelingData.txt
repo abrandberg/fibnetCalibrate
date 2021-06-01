@@ -1,0 +1,90 @@
+1						nSeries
+REPLACE					WriteOption
+
+1						UseMeasuredData (	0: Use random data;
+											1: Use data from measurement;
+											2: Use data from measurement with constant length				equal to the length weighted average;
+											3: Use data from measurement with constant cross-section radius equal to the length weighted average;
+											4: Use data from measurement with constant Wall-Thickness		equal to the length weighted average;
+											5: Use data from measurement with constant Curvature			equal to the length weighted average;)
+outID.txt			        MeasurementFile (filename for measured data)
+1.3d0					RadSwell (Ratio between dry and wet radius of fibers)0.78
+1.00d0					WThkSwell (Ratio between dry and wet wall thickness of fibers)0.528 0.303
+
+1.30d0					MaxCurvature 1.09 (Maximum Curvature (Ratio between curved and projected length) to be read from fiberlab data. The fibers with larger curvature are ignored.
+
+0.3d-3					MinFibLength (Fibers with shorter lengths are treated as fines) 0.1
+0		 			FinePercentage (Between 0 to 100 for Percentage based on number; 0 to -100 for Percentage based on volume; bigger than 100: no constraint)
+
+1.2d3					Density 1.43d3 1.26d3
+
+2.19d-3					LengthMean
+1.68d-3					LengthStd
+1.0d-4					LengthMin
+1.0d-2					LengthMax
+
+10.87d-6				RadiusMean
+3.35d-6					RadiusStd
+3.25d-6					RadiusMin
+2.7d-5					RadiusMax
+
+3.41d-6					WallThkMean
+1.21d-6					WallThkStd
+0.7d-6					WallThkMin
+3.0d-6					WallThkMax3.0d-6
+
+2.77d0					WHRatio (=0 for circular cross-section)2.9d0
+2				    	MakeRectMethod (1: takes input width as diameter and matches the areas; 2: takes input width as width and calculates height using WHRatio)
+0.0d0					WallThkPressability (0: Not pressable; 1:Completely pressable)
+0.1d0					MinHollowRatio (Ratio between the minimum allowed hollow part dimension and wall thickness (holes with dimensions smaller than allowed will be removed and sections will become solid))
+
+9.0				    	InterfaceAngle (The maximum angle of a fiber-piece with horizontal plane)
+
+20.4d9					EMean
+8.4d8					EStd
+10.0d9					EMin
+30.0d9					EMax
+
+5.0d7					GMin
+6.0d7					GMax
+
+0.0d0					AngleMean
+0.0d0					AngleStd (0: handsheet with completely random orientations)
+-180.0d0				AngleMin
+180.0d0					AngleMax
+
+1						ShapeMin (1: include sine-shaped fibers, 2:exclude sine-shaped fibers)
+1						ShapeMax(1: include polynomial-shaped fibers, 2:exclude polynomial-shaped fibers)
+
+100.0d-3 				Grammage
+10.0d-3					NetworkLength
+10.0d-3					NetworkWidth
+80.0d-6					PaperThk(if (=0) it will not press!)
+
+-1				     	Direction (1: one-sided network (deposition from top), -1: two-sided network(deposition from both sides))
+
+000.0					Height
+
+0						LinCont (=1: Assume that small segments are linear and will be raised completely if in contact)
+
+25			  			MaterialNum
+
+
+0.23717810				S2 (FOR RANDOMIZATION PUT S2 & S3 to 0.0 - Default:0.23717810)
+0.52636370				S3 (FOR RANDOMIZATION PUT S2 & S3 to 0.0 - Default:0.52636370)
+
+0.01					SeedLength
+0.02					SeedRadius
+0.03					SeedWallThk
+0.04					SeedAngle
+0.05					SeedShape
+0.06					SeedCoeffs
+0.07					SeedX
+0.08					SeedY
+0.09					SeedMaterial
+0.10					SeedR
+0.11					SeedPickData
+
+.TRUE. 					CloseAfterFinished
+
+.FALSE.					SaveContData

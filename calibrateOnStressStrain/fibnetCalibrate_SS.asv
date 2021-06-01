@@ -1,0 +1,116 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+% FIBNET CALIBRATE
+% 
+% fitTensileTest.m is the main function of the fibnetCalibrate repository, hosted at:
+%
+%   https://github.com/abrandberg/fibnetCalibrate
+%
+% The essential task of this script is to calibrate the fibnet micromechanical model for paper
+% mechanics. Currently, it works for calibration in uniaxial tension, but it can easily be extended
+% to other situations.
+%
+% This script works as follows:
+%
+%   TO DO
+%
+%
+% created by: August Brandberg augustbr at kth dot se
+% date: 2021-06-01
+%
+
+% Meta instructions
+clear; close all; clc
+format compact
+addpath('auxilliaryFunctions')
+
+
+
+% CTRL structure
+ctrl.workDir    = cd;
+ctrl.runDir     = [ctrl.workDir filesep 'runs1' filesep];
+ctrl.saveDir    = [ctrl.workDir filesep 'runs1Saves' filesep];
+
+ctrl.myPackingPointer       = ['femInputs' filesep 'MyPacking.exe'];
+ctrl.modelingDataPointer    = ['femInputs' filesep 'ModelingData.txt'];
+ctrl.pulpDataFile           = ['femInputs' filesep 'Euca2.txt'];
+ctrl.apdlHeader             = ['femInputs' filesep 'ssCalib_Part1.txt'];
+ctrl.apdlInput              = ['femInputs' filesep 'ssCalib_Part2.txt'];
+ctrl.simName                = 'test';
+ctrl.customExecutable 
+
+% Generate folders that will be needed
+if not(exist(ctrl.runDir,'dir'))
+    mkdir(ctrl.runDir)
+end
+if not(exist(ctrl.saveDir,'dir'))
+    mkdir(ctrl.saveDir)
+end
+
+
+
+% Set network generation options
+netgen.length           = 1;                                      % Length along MD, cm
+netgen.width            = 1;                                      % Length along CD, cm
+netgen.grammage         = 40;                                     % Surface weight per area, g/m^2
+netgen.thickness        = 60;                                    % Sheet thickness, um
+netgen.angleStd         = [0];                                    % Orientation spread, deg
+netgen.interfaceAngle   = 5;
+
+
+fibnet.width        = 1000;                                   % FEM model length, um
+fibnet.length       = 1000;                                   % FEM model width, um
+
+
+opts = optimset('Display','iter','TolFun',0.01,'TolX',0.02);
+% Solver settings
+
+
+paramName = {'Efiber'};
+
+
+% Experimental value to match:
+Eexp = [1 2 3];
+
+
+
+lossFcn = @(x) generateFibnetResult(x,ctrl,netgen,fibnet,paramName) - Eexp;
+
+
+lossFcn(4)
+
+
+
+
+
+
+
+
+
+costFcn = @(x) sqrt(  ...
+                    1/length(ExperimentalDataToMatch)* ... 
+                    sum( ...
+                            ( ...
+                                unloadFitFun(x,ctrl) ...
+                                 ... %./ExperimentalDataToMatch
+                                ).^2 ...
+                             ) ...
+                    );
+
+
+[x,fval] = fminsearch(costFcn,Efac,opts);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

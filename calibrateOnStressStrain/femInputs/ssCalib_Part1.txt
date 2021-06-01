@@ -1,0 +1,29 @@
+finish
+/clear
+!/track,-1 ! switch off tracking
+/gopr
+
+! --- this set of commands are to determine wheather the previous results exists
+*get,whois,parm,ARG1,type
+*if,whois,eq,3,then
+   /inquire,there,exist,%ARG1%_%ARG2%,out
+   *if,there,eq,1,then
+       *return
+   *endif
+   /nerr,,,-1
+   _STATUS = 0
+   /out,%ARG1%_%ARG2%,out
+   *if,_STATUS,gt,1,then
+       /nerr,,,0
+       *return
+   *endif
+   /nerr,,,0
+   /filname,%ARG1%_%ARG2%
+   /inquire,namef,jobname
+   /inquire,there,exist,namef(1),rst
+   *if,there,eq,1,then
+       *return
+   *endif
+*endif
+EFiberMult = 1
+KODMult = 1

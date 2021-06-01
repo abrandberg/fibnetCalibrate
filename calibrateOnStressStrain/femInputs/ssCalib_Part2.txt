@@ -1,0 +1,742 @@
+orient = dirIn             ! orientation in degrees
+option = 1               ! bond separation model (1: bilinear; >1: other, under development)
+visu = 0                 ! 1 - save data for matlab visualization
+partype = 0              ! 5 - include parallel fibers (not needed in 3D since there are few)
+fract = 1                ! fraction of the bonds to retain
+plast = 0                ! 0: no plasticity; 1: plasticity; 2: creep ; 3: both
+rect = 0                 ! use rectangular cross-section
+debo = 0                 ! 0: no debonding
+soft = 0                 ! soft boundaries + cp
+ 
+fines = 0                ! 1: fines are in mat 25, 2: distributed fines
+pi = acos(-1)            ! 3.1415...
+
+*if,fines,gt,0,then
+    fper = 0             ! percent of fines (only for fines = 2)
+    lrad = 0.5           ! assumed radius of fines
+    lpin = 100           ! maximum reach radius
+    AreaL = (lrad**2)*pi ! cross-section area of fines
+    ExL = 70e3           ! elastic modulus of fines
+    fstrain = 0.03       ! failure strain for fines
+    gram = 151.4         ! network grammage
+*endif
+
+retain = 0               ! specify the exact number of contacts to retain
+ 
+mu = 0.0                 ! coefficient of friction
+Ex =  30.0E3*EFiberMult  ! elastic modulus of the fiber
+Et =  Ex/4.2             ! tangent modulus
+sigy = 240               ! yield stress 235 is fine
+
+
+kof_base = 1.6           ! scaling factor for bond strength
+kof = 1.0                ! scaling factor for contact stiffness (calibrated)
+kofd = KODMult           ! scaling factor for directional drying
+method = 0               ! the way to apply moisture scaling (0 - node by node)
+E_cn = 11137*kof         ! normal contact stiffness
+E_ct = 10032*kof         ! shear contact stiffness
+
+*get,np,runst,,rspeed,nproc
+
+! -------------------------------
+*if,debo,eq,1,then
+    *if,option,eq,1,then
+        Sbt = 16041*kof_base    ! shear bond strength
+        Sbn = Sbt/4             ! normal bond strengh
+        sepkof = 1.15           ! fraction of separation energy
+        d_sn = Sbn/E_cn*sepkof  ! normal separation distance
+        d_st = Sbt/E_ct*sepkof  ! tangen separation distance
+    *elseif,option,eq,3,then
+        Sbn = 1224              ! normal b-coefficient
+        Sbt = 5813/3            ! shear b-coefficient
+        d_sn = 1.0              ! dummy
+        d_st = 1.0              ! dummy
+    *elseif,option,eq,4,then
+        Sbn = 28584*0.6         ! normal bond strength
+        Sbt = 16041*0.6         ! shear bond strength ! * ratio of mat1/mat2 (strength) =>1 --> coefficent to play around with 
+        d_sn = 4*0.6
+        d_st = 4*0.6
+    *endif
+    distr = 0                   ! type of the variation of bonding properties (see the use below)
+*endif
+
+density = 1130*(1E-6)**3        ! density of fibers
+dry = 1                         ! 1 - drymode
+stat = 0                        ! 0 - static; 1-dynamic; 2-dynamic, no freq. step control
+check = 3                       ! check input data (do not change)
+cycl = 0                        ! 1 - cycling load (see the use below)
+
+
+/prep7
+immed,0 
+seltol,1e-8
+shpp,off                        ! deactivate element shape checking (done in the solver)
+
+*if,stat,eq,0,then
+    *if,plast,ge,2,then
+       fin_tim = 10                ! time for creep
+    *else
+       fin_tim = 1                 ! ficticious time
+    *endif
+*else
+    fin_tim = 0.01                 ! impact loading
+*endif
+
+*if,dry,eq,1,then
+    fs = 0.1                   ! straining in %
+*else
+    fs = 0.1
+*endif
+
+*if,debo,eq,1,then
+    meth = 1                    ! 1 - agressive contact trimming, 2 - moderate; 3 - none
+*else
+    meth = 1
+*endif
+
+stbc = 0.01                     ! viscous damping in debonding
+
+! --- redefine elements
+et,1,104                        ! define beam element
+keyopt,1,7,1                    ! incore computation
+
+et,2,101                        ! define slave element
+et,3,102                        ! define master element
+keyopt,3,8,3                    ! 1 - ingnore penetration; 3 - remove penetration
+
+*if,partype,eq,5,then
+    et,partype,102              ! define parallel type
+    keyopt,partype,8,3          ! 1 - ingnore penetration; 3 - remove penetration
+    keyopt,partype,10,1         ! parallel beam contact
+*endif
+
+! --- load the geometry  from the file (this is for the debug purposes)
+/inquire,there,exist,geom,db
+
+there = 0
+! --- in this block we define the file to be read
+*if,there,eq,0,then
+    *dim,afnm,string,128
+    *if,whois,eq,3,then
+        /com, Reading %ARG1%
+        usr2,P/%ARG1%,check
+        afnm(1) = ARG1
+    *else
+        afnm(1) = INPF
+        usr2,%afnm(1)%,check
+    *endif
+! --- center the geometry around (0,0)
+    nsle,,corner
+    *get,maxx,node,,mxloc,x        ! maximum x all over the model
+    *get,minx,node,,mnloc,x        ! minimum x all over the model
+    *get,maxy,node,,mxloc,y        ! maximum x all over the model
+    *get,miny,node,,mnloc,y        ! minimum x all over the model
+    dx = 0.5*(maxx+minx)           ! length of the network
+    dy = 0.5*(maxy+miny)           ! length of the network
+    nall
+! --- correct if the center is in zero
+    ngen,2,0,all,,,-dx,-dy
+! --- rotate the network
+    *if,orient,ne,0,then
+        csys,1
+        ngen,2,0,all,,,0,-orient
+        csys,0
+    *endif
+
+! --- parse the file name to get the length and width
+    *do,i,1,128
+        *if,strsub(afnm(i),1,1),eq,'W',exit
+    *enddo
+    nLoc1 = i
+
+    *do,i,nLoc1,128
+        *if,strsub(afnm(i),1,1),eq,'_',exit
+    *enddo
+    nLoc2 = i
+    nChar=nLoc2-nLoc1-1
+    widstr=strsub(afnm(1),nLoc1+1,nChar) !copy '1.0' width in string
+    wid=valchr(widstr)
+    /com, width of the network %wid% mm
+
+    *do,i,1,128
+        *if,strsub(afnm(i),1,1),eq,'L',exit
+    *enddo
+    nLoc1 = i
+
+! --- check if there is no info about width - wrong input file
+    *if,nLoc1,eq,0,then
+       *msg,warn,'wrong input file'
+       /exist,nosave
+    *endif
+
+    *do,i,nLoc1,128
+        *if,strsub(afnm(i),1,1),eq,'_',exit
+    *enddo
+    nLoc2 = i
+    nChar=nLoc2-nLoc1-1
+    lenstr=strsub(afnm(1),nLoc1+1,nChar) !copy '1.0' width in string
+    len=valchr(lenstr)
+    /com, length of the network %len% mm
+ ! --- rescale to microns
+    len = len*1000
+    wid = wid*1000
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! --- we can overwrite the size here
+    len = lengthIn
+    wid = widthIn
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! --- introduce the notch radius
+    radius = 0 ! wid/10
+
+   /inquire,namef,jobname
+    ndiv = 20
+! --- this is the call to the macro that does the cutting
+    el4lines,ndiv,-len,-wid,radius
+
+    save
+    fini
+! -- clear the data base and make a screenshot
+    /cle,nost
+    *get,whois,parm,ARG1,type
+    *if,whois,eq,3,then
+        /filname,%ARG1%_%ARG2%
+    *endif
+    resume
+
+! --- perform the output for visualization
+    *if,visu,eq,1,then
+        *get,nnn,node,,count
+
+        *vget,nx,node,,loc,x
+        *vget,ny,node,,loc,y
+        *vget,nz,node,,loc,z
+
+        *do,i,1,nnn
+            nx(i) = nx(i)*1e-6
+            ny(i) = ny(i)*1e-6
+            nz(i) = nz(i)*1e-6
+        *enddo
+
+        *vget,typ,rcon,,const,1
+        *vget,r1,rcon,,const,2
+        *vget,r2,rcon,,const,3        
+        *vget,r3,rcon,,const,4
+ 
+
+        *vget,n1,elem,,node,1
+        *vget,n2,elem,,node,2
+        *vget,n3,elem,,node,3
+        *vget,rl,elem,,attr,real
+        *vget,mt,elem,,attr,mat
+
+
+        /out,namef(1),'xyz'
+        *vwrite,SEQU,nx(1),ny(1),nz(1)
+        (1F10.0,3E15.5)
+        /out
+
+        /out,namef(1),'typ'
+        *vwrite,SEQU,typ(1),r1(1),r2(1),r3(1)
+        (2F10.0,3E15.5)
+        /out
+
+        /out,namef(1),'nod'
+        *vwrite,SEQU,n1(1),n2(1),n3(1),rl(1),mt(1)
+        (6F10.0)
+        /out
+
+        *return
+        /eof
+    *endif
+
+    /prep7
+    /show,png
+    eplot
+    /show,close
+
+
+*else
+    
+    parsav,all,namef(1),'par'
+
+    resume,geom,db
+
+    *del,namef
+
+    /inquire,namef,jobname
+    parres,change,namef(1),'par'
+
+*endif
+
+! --- in case of plasticity, we need to activate extra keyoptions
+*if,plast,ne,0,then
+    keyopt,1,1,1               ! non-linear material
+    keyopt,1,8,1               ! no cross-section update
+*endif
+
+! --- split into dry and wet mode
+*if,dry,eq,1,then
+    keyopt,3,1,3               ! keyopt 1 : 0 - standart contact; 1 - rought; 3 - bounded
+    keyopt,3,9,1               ! 0 - no rotation; 1 - rotational constraints
+    *if,partype,eq,5,then
+        keyopt,partype,1,6     ! 6 - bounded, initial contact
+        keyopt,partype,9,1     ! 0 - no rotation; 1 - rotational constraints
+    *endif
+*else
+    keyopt,3,1,2               ! keyopt 1 : 0 - standart contact; 1 - rought; 2 - no sepration; 3 - bounded
+    *if,partype,eq,5,then
+        keyopt,partype,1,2     ! keyopt 1 : 0 - standart contact; 1 - rought; 2 - no sepration; 3 - bounded
+    *endif
+*endif
+
+nsle,s,corner
+*get,maxx,node,,mxloc,x        ! maximum x all over the model
+*get,minx,node,,mnloc,x        ! minimum x all over the model
+*get,maxy,node,,mxloc,y        ! maximum x all over the model
+*get,miny,node,,mnloc,y        ! minimum x all over the model
+
+
+dw = 1
+*dowhile,dw
+   *if,minx,ge,-len/2-0.5E-7,then
+       dw = 0
+   *else
+       nsel,s,loc,x,minx
+       esln
+       nsle
+       edel,all
+       ndel,all
+       eall
+       nsle,s,corner
+       *get,minx,node,,mnloc,x        ! minimum x all over the model
+   *endif
+*enddo
+
+dw = 1
+*dowhile,dw
+   *if,maxx,le,len/2+0.5E-7,then
+       dw = 0
+   *else
+       nsel,s,loc,x,maxx
+       esln
+       nsle
+       edel,all
+       ndel,all
+       eall
+       nsle,s,corner
+       *get,maxx,node,,mxloc,x        ! minimum x all over the model
+   *endif
+*enddo
+
+dw = 1
+*dowhile,dw
+   *if,miny,ge,-wid/2-0.5E-7,then
+       dw = 0
+   *else
+       nsel,s,loc,y,miny
+       esln
+       nsle
+       edel,all
+       ndel,all
+       eall
+       nsle,s,corner
+       *get,miny,node,,mnloc,y        ! minimum x all over the model
+   *endif
+*enddo
+
+dw = 1
+*dowhile,dw
+   *if,maxy,le,wid/2+0.5E-7,then
+       dw = 0
+   *else
+       nsel,s,loc,y,maxy
+       esln
+       nsle
+       edel,all
+       ndel,all
+       eall
+       nsle,s,corner
+       *get,maxy,node,,mxloc,y        ! minimum x all over the model
+   *endif
+*enddo
+
+
+numcmp,node                    ! compress node numbering
+numcmp,elem                    ! compress elem numbering
+
+usr6,meth,1,fract,partype
+Emean = 0
+*get,maxmat,mat,,count         ! get maximum material number
+
+*if,fines,eq,1,then
+    esel,mat,maxmat
+    et,4,104
+    keyopt,4,7,1               ! non-linear material
+    emodif,all,type,4
+    eall
+*endif
+
+*do,i,1,maxmat
+    *get,cEx,Ex,i
+    Emean = Emean + cEx
+    *if,stat,gt,0,then
+        dens,i,density
+    *endif
+*enddo
+Emean = Emean/maxmat
+
+*do,i,1,maxmat
+    *get,cEx,Ex,i
+    cEx = cEx*Ex/Emean
+
+    mpdele,all,i
+    mptemp
+    mptemp,1,0  
+    mptemp,2,1.0
+
+    mpdata,EX,i,,cEx  
+    mpdata,EX,i,,cEx/kofd
+
+    mpdata,GXY,i,,cEx/5
+    mpdata,GXY,i,,cEx/5/kofd
+
+*enddo
+
+
+
+*if,dry,eq,0,then
+! --- this is for the wet mode
+    usr5,3,0.01            ! contact stiffness scaling
+    usr5,12,0.1            ! *additional* tanget stiffness scaling
+    usr5,13,-2.5*0.44*2.0  ! tangent adhesion
+    usr5,26,2.5            ! normal adhesion
+*else
+    usr5,3,-E_cn           ! normal stiffness
+    usr5,12,-E_ct          ! tangent stiffness 
+    usr5,6,-10             ! pinball
+*endif
+usr5,25,2                  ! slip-off tolerance in % of the segment length
+
+ndele,all                  ! delete all the unassigned nodes
+numcmp,node                ! compress node numbering
+numcmp,elem                ! compress elem numbering
+
+
+! --- friction
+*if,mu,gt,0.0,then
+    mu,maxmat+1,mu
+*endif
+
+! --- debonding
+*if,debo,eq,1,then
+    tb,user,maxmat+1,1,6,option
+    tbdata,1,Sbn,d_sn,Sbt,d_st,stbc,1
+*endif
+
+! --- material model
+*if,dry,eq,1,and,plast,ne,0,then
+   *if,fines,eq,1,then
+       to_conv = maxmat - 1
+   *else
+       to_conv = maxmat
+   *endif
+    *do,i,1,to_conv
+	*get,cEx,Ex,i
+	eta = cEx/Emean
+        *if,plast,eq,1,or,plast,eq,3,then
+            tb,user,i,2,2
+            tbtemp,0
+            tbdata,,sigy,Et
+            tbtemp,1.0
+            tbdata,,sigy/kofd,Et/kofd/5
+        *endif
+    *enddo
+*endif
+
+esel,type,3,partype,partype-3  ! select master elements
+emodif,all,mat,maxmat+1        ! assign those params to master elements
+eall                           ! select all the elements again
+
+/solu
+nsle,s,corner
+*get,maxx,node,,mxloc,x        ! maximum x all over the model
+*get,minx,node,,mnloc,x        ! minimum x all over the model
+*get,maxy,node,,mxloc,y        ! maximum x all over the model
+*get,miny,node,,mnloc,y        ! minimum x all over the model
+nall
+
+len = (maxx-minx)
+wid = (maxy-miny)
+
+nsel,,loc,x,minx ! select all the nodes from the left boundary
+esln
+cm,fixed,elem
+d,all,all
+*if,soft,eq,1,then
+    ddele,all,uy
+*endif
+
+eall
+
+nsel,,loc,x,maxx ! select all the nodes from the right boundary
+cmsel,,fixed
+nsle,u
+d,all,all
+*if,soft,eq,1,then
+    ddele,all,uy
+*endif
+
+! --- cyclic loading
+*if,cycl,eq,1,then
+   *dim,dsp,table,3,1
+   dsp(1,0) = 0.0
+   dsp(1,1) = 0.0
+   dsp(2,0) = 0.5*fin_tim
+   dsp(2,1) = fs*1e-2*len/2.5
+   dsp(3,0) = 1.0*fin_tim
+   dsp(3,1) = 0.0
+   d,all,ux,%dsp%           ! overwrite the translational constraint to 1E-2
+*else
+   d,all,ux,fs*1e-2*len
+*endif
+
+nall      
+
+! --- setup the variation in bonding properties
+*if,distr,ge,1,then
+    esel,type,3
+    *get,noc,elem,,count
+    *dim,scf,array,noc
+   *if,distr,eq,1,then
+! --- gaussian (mean = 1; std = 0.5)
+       *vfill,scf,gdis,0.9905,0.53
+   *elseif,distr,eq,2,then
+! --- gamma (mean 1, A-type, std=0.5)
+       *vfill,scf,gamm,,4,0.25
+   *elseif,distr,eq,3,then
+! --- gamma (mean 1, L-type, std=1)
+       *vfill,scf,gamm,,1,1
+   *elseif,distr,eq,4,then
+! --- gamma (mean 1, italic A-type, std=0.5)
+       *vfill,scf,rand,0,2
+   *endif 
+   ext = 0
+   *do,i,1,noc
+       ext = elnext(ext)
+       ri = elmiqr(ext,-3)
+       rmodif,ri,27,abs(scf(i))
+!       /com, %scf(i)*1E3/Sbn%
+   *enddo
+*endif
+
+cmdele,fixed
+
+nall                           ! select all the nodes again
+eall
+
+fini
+
+! --- change the cross-section of required (for debug)
+*if,rect,eq,1,then
+    chng2rect,104
+*elseif,rect,eq,2,then
+    chng2pipe,104
+*endif
+
+save                            ! save the database
+
+/cle,nost
+*get,whois,parm,ARG1,type
+*if,whois,eq,3,then
+    /filname,%ARG1%_%ARG2%
+*endif
+resume
+
+
+! >>>>>>>>>>>>>>>>>>>>>>>>>> Solver call >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+! ------  1    2  3  4   5   6  7   8   9  10    11  12  13  14  15  16  17  18  19
+!         |    |  |  |   |   |  |   |   |   |     |   |   |   |   |   |   |   |   |
+  usr1, 0.0, 1.0, 0, 0,  1,  1, 1,  1,  0,  0,  0.0,  0,  0,  1,  0,  0 , 0,  0,  3
+! 8  : 1 - activate elimination round
+! 19 : 3 - removed tangled ends
+
+memm,list
+
+! --- make sure we have a specific number of contacts
+*if,retain,gt,0,then
+  /prep7
+  esel,type,2
+  esel,r,live
+  *get,nce,elem,,count
+  *if,nce,gt,retain,then
+     *vget,ace,elem,,elist
+     ntd = nce-retain
+     *dowhile,ntd
+         num = nint(rand(1,nce))
+         enum = ace(num)
+         *if,enum,lt,0,cycle
+         ace(num) = -1
+         esel,real,elmiqr(enum,-3)
+         ekill,all
+         ntd = ntd - 1
+     *enddo
+  *else
+     /eof
+  *endif
+  *del,ace
+  eall
+  fini
+*endif
+
+! --- this the macro call to the cleaning function
+after_usr
+
+/cle,nost
+*get,whois,parm,ARG1,type
+*if,whois,eq,3,then
+    /filname,%ARG1%_%ARG2%
+*endif
+resume
+
+! --- introduce the fines
+*if,fines,eq,2,then
+    /prep7
+    *get,maxe,elem,,num,maxd       ! maximum elem number
+    *get,rsn,rcon,,num,max         ! maximum real number
+    et,4,100
+    r,rsn+1,AreaL,AreaL*ExL*fstrain  ! Area [um^2]
+    ex,maxmat+2,ExL                   ! Stiffness [MPa]
+    dens,maxmat+2,1427*(1E-6)**3
+    maa = wid*len*gram*1e-3*(1E-6)**2*fper/100
+    usr3,lpin,4,rsn+1,maxmat+2,maa
+    esel,type,4
+    eall
+    fini
+*endif
+
+
+save
+/solu
+
+ncnv,2
+
+*if,kofd,gt,1,then
+    tref,0.0
+    kbc,1  ! note, kbc only affects temperatures
+    *get,nnn,node,,count
+    esel,type,1
+    *get,n_beams,elem,,count
+    *get,mxn,elem,,num,max
+    nfib = elmiqr(mxn,-3)
+    *afun,deg
+    clocal,11,0,0,0,0,orient
+
+    *if,method,eq,1,then
+        *do,i,1,nfib
+            esel,real,i
+            nsle
+            *get,n1,node,,num,min
+            *get,n2,node,,num,max
+            ang = asin(abs(ny(n1)-ny(n2))/distnd(n1,n2))
+            bf,all,temp,1-cos(abs(ang))**4
+        *enddo
+    *else
+        *do,i,1,nfib
+            esel,real,i
+            nsle
+            *get,nnn,node,,count
+            n2 = ndnext(0)
+            *do,j,1,nnn-1
+                n1 = n2
+                n2 = ndnext(n2)
+                ang = asin(abs(ny(n1)-ny(n2))/distnd(n1,n2))          
+                bf,n1,temp,1-cos(abs(ang))**4
+            *enddo
+            bf,n2,temp,1-cos(abs(ang))**4
+        *enddo
+    *endif
+
+    alls
+
+! --- needed for finer node by node definition
+! ENEXTN(N,LOC) Element connected to node N. LOC is the position in the resulting list when many elements share the node. A zero is returned at the end of the list. 
+! NELEM(E,NPOS) Node number in position NPOS (1--20) of element E. 
+! DISTND(N1,N2) Distance between nodes N1 and N2. 
+   csys,0
+*endif
+
+*if,soft,eq,1,then
+    nsel,,loc,y,miny
+    d,all,uy
+    nsel,,loc,y,maxy
+    cp,1,uy,all
+*endif
+
+*if,fs,gt,0,then
+    sc = fs 
+*else
+    sc = 5
+*endif
+
+save
+
+! >>>>>>>>>>>>>>>>>>>>>>>>>> Solver call >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+! ------  1       2     3     4        5        6        7    8    9    10    11    12  13  14  15    16    17   18  19
+!         |       |     |     |        |        |        |    |    |    |      |     |   |   |   |     |     |    |   |
+usr1,   1.0, fin_tim,   1,    1,       5, fs*1000,       5,  15,   1,   1, -0.01,    0,  0, np,  0,   -5,  stat, -2, -4
+! 1  : percentage of strain softening to be considered a network failure
+! 2  : end time 1.0
+! 3  : linesearch: 0 - off, 1 -auto, 2-always on
+! 4  : predictor
+! 5  : initial number of substeps
+! 6  : maximum number of substeps
+! 7  : minimum number of substeps
+! 8  ! target number of iteration
+! 9  : 1 - MUMPS sparse solver 
+!      3 - Intel Pardiso or IBM Watson sparse solvers
+!      negative means out-of-core
+! 10 : stabilization 0 - off, 1 - on
+! 11 : stabilization factor
+! 12 : stabilization for the first substep 0 - off, 1 - on only at failure, 2 - on
+! 13 : 1 - debug messages; -1 timing statistics
+! 14 : number of processors
+! 15 : > 0 - output residuals
+! 16 : > 0 number of results to output; <0 - output every n-th stap
+! 17 : transient analysis key
+! 18 : sparse solver reordering scheme: 1-MMD otherwise METIS or equivalent; 
+!      negative means reused ordering (faster but uses more memory)
+! 19 : special versions: 1 (negative or zero non-positive means in-core)
+!      0, or 4 - only force control
+!      1       - force and displacement control on (should be used if no debonding)
+!      2       - version for foams, not to be used with paper
+!      3       - force control and selective displacement control
+! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+save
+fini
+memm,list
+
+/post1
+set,last
+esel,type,1
+esel,r,live
+g_s
+/gline,1,0
+/show,png
+plnsol,u,z
+set,near,,,,fin_tim*0.5
+plnsol,u,z
+/show,close
+! the following lines are to avoid conflicts with ANSYS threads during post-processing
+
+reaContacts,ARG1,ARG2
+!n_elem,ARG1
+!get_energy,ARG1
+!cont_draw3d,ARG1
+
+afnm =
+/inquire,afnm,jobname
+/delete,afnm(1),ovr
+/delete,fname,log
+/out
+*return ! end of file

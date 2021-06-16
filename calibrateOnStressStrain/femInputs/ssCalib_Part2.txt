@@ -5,7 +5,7 @@ partype = 0              ! 5 - include parallel fibers (not needed in 3D since t
 fract = 1                ! fraction of the bonds to retain
 plast = 0                ! 0: no plasticity; 1: plasticity; 2: creep ; 3: both
 rect = 0                 ! use rectangular cross-section
-debo = 0                 ! 0: no debonding
+debo = deboIn            ! 0: no debonding
 soft = 0                 ! soft boundaries + cp
  
 fines = 0                ! 1: fines are in mat 25, 2: distributed fines
@@ -41,7 +41,7 @@ E_ct = 10032*kof         ! shear contact stiffness
 ! -------------------------------
 *if,debo,eq,1,then
     *if,option,eq,1,then
-        Sbt = 16041*kof_base    ! shear bond strength
+        Sbt = SBMult*16041*kof_base    ! shear bond strength
         Sbn = Sbt/4             ! normal bond strengh
         sepkof = 1.15           ! fraction of separation energy
         d_sn = Sbn/E_cn*sepkof  ! normal separation distance
@@ -83,7 +83,11 @@ shpp,off                        ! deactivate element shape checking (done in the
 *endif
 
 *if,dry,eq,1,then
-    fs = 0.1                   ! straining in %
+    *if,debo,eq,0,then
+        fs = 0.1                   ! straining in %
+    *elseif,debo,eq,1,then
+        fs = 5.0
+    *endif
 *else
     fs = 0.1
 *endif
@@ -681,10 +685,20 @@ ncnv,2
 
 save
 
+
+*if,debo,eq,0,then
+    usr1,   1.0, fin_tim,   1,    1,       5, fs*1000,       5,  15,   1,   1, -0.01,    0,  0, np,  0,   -5,  stat, -2, -4
+*elseif,debo,eq,1,then
+    usr1,   1.0, fin_tim,   1,    1,     100, fs*1000,     100,  15,   1,   1, -0.01,    0,  0, np,  0,   -5,  stat, -2, -4
+*endif
+
+
+
+
 ! >>>>>>>>>>>>>>>>>>>>>>>>>> Solver call >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 ! ------  1       2     3     4        5        6        7    8    9    10    11    12  13  14  15    16    17   18  19
 !         |       |     |     |        |        |        |    |    |    |      |     |   |   |   |     |     |    |   |
-usr1,   1.0, fin_tim,   1,    1,       5, fs*1000,       5,  15,   1,   1, -0.01,    0,  0, np,  0,   -5,  stat, -2, -4
+!usr1,   1.0, fin_tim,   1,    1,       5, fs*1000,       5,  15,   1,   1, -0.01,    0,  0, np,  0,   -5,  stat, -2, -4
 ! 1  : percentage of strain softening to be considered a network failure
 ! 2  : end time 1.0
 ! 3  : linesearch: 0 - off, 1 -auto, 2-always on

@@ -28,12 +28,21 @@ for tLoop = 1:numel(fibnetIn)
     % Import output
     importedREA = importfile_REA([ctrl.runDir filesep ctrl.simName '.rea']);
 
-
-    % Calculate the elastic modulus
-    selIdxTS = [1 size(importedREA,1)];
-    output(tLoop)   = 1e-6*diff(0.5*(importedREA(selIdxTS,2)+importedREA(selIdxTS,3)))./ ...
-                     (diff(importedREA(selIdxTS,1))/100*fibnet.widthIn*1e-6*netgen.thickness*1e-6);
-
+    if strcmp(ctrl.optiVar,'Stiffness')
+        % Calculate the elastic modulus
+        selIdxTS = [1 size(importedREA,1)];
+        output(tLoop)   = 1e-6*diff(0.5*(importedREA(selIdxTS,2)+importedREA(selIdxTS,3)))./ ...
+                         (diff(importedREA(selIdxTS,1))/100*fibnet.widthIn*1e-6*netgen.thickness*1e-6);
+                     
+    elseif strcmp(ctrl.optiVar,'Strength')
+        
+        if max(0.5*(importedREA(:,2)+importedREA(:,3))) == max(0.5*(importedREA(end,2)+importedREA(end,3)))
+            disp('No failure!')
+            output(tLoop) = 1e9;
+        else
+            output(tLoop) = 1e-6*max(0.5*(importedREA(:,2)+importedREA(:,3)))/(fibnet.widthIn*1e-6*netgen.thickness*1e-6);
+        end
+    end
 end
 
 

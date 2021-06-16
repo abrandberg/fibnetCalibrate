@@ -62,6 +62,7 @@ fibnet(1).widthIn        = 1000;                                   % FEM model l
 fibnet(1).lengthIn       = 1000;                                   % FEM model width, um
 fibnet(1).dirIn            = 0;                                      % Prerotation angle, e.g. 0, 45, 90
 
+ctrl.optiVar = 'Stiffness';
 
 opts = optimset('Display','iter','TolFun',0.05,'TolX',0.05);
 % Solver settings
@@ -122,7 +123,7 @@ Eexp = [2e9 1.5e9 1e9];
 assert(numel(Eexp) == numel(fibnet))
 
 
-
+ctrl.optiVar = 'Stiffness';
 
 
 paramName = {'KODMult'};
@@ -174,6 +175,42 @@ toc
 %    of generateFibnetResult.m.
 %
 %
+
+fibnet = fibnet(1);
+fibnet(1).widthIn        = 1000;                                   % FEM model length, um
+fibnet(1).lengthIn       = 1000;                                   % FEM model width, um
+fibnet(1).dirIn          = 0;                                      % Prerotation angle, e.g. 0, 45, 90
+fibnet(1).EFiberMult     = fibnet(1).EFiberMult;
+fibnet(1).KODMult        = xOut;
+
+
+ctrl.optiVar = 'Strength';
+Eexp = [20e6];
+
+fibnet(1).deboIn        = 1;
+paramName = {'SBMult'};
+xIn       = [      0.2 ];
+
+lossFcn = @(x) generateFibnetResult(x,ctrl,netgen,fibnet,paramName) - Eexp;
+
+costFcn = @(x) sqrt(  ...
+                    1/length(Eexp)* ... 
+                    sum( ...
+                            ( ...
+                                lossFcn(x) ...
+                                 ./Eexp ... 
+                                ).^2 ...
+                             ) ...
+                    );
+
+[xOut,fval] = fminsearch(costFcn,xIn,opts);
+
+generateFibnetResult(xOut,ctrl,netgen,fibnet,paramName) 
+
+
+
+
+
 
 
 

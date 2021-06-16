@@ -27,3 +27,5 @@ finish
 *endif
 EFiberMult = 1
 KODMult = 1
+deboIn = 0
+SBMult = 0

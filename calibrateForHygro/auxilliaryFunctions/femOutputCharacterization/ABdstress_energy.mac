@@ -1,0 +1,149 @@
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Axial force output
+!
+! This function outputs the axial force in each fiber element in the network
+! by calculating the average of the nodal force along the axis of the element
+! from the nodal forces at the end points of the element.
+! 
+! The values output are:
+! 	- COLUMN 1 : Element index
+! 	- COLUMN 2 : Fiber real index
+! 	- COLUMN 3 : Fiber axial force
+! 	- COLUMN 4 : Element length
+! 	- COLUMN 5 : Element material pointer
+!   - COLUMN 6 : Plastic energy dissipated
+!
+!
+fini
+/cle
+
+/POST1  
+inres,all!nsol,misc,rsol
+!SET,,, ,,, ,2 !SET,LAST
+!SET,PREVIOUS
+
+! --- get the fracture data on the last step
+set,first
+*get,nset,active,,set,nset
+
+
+! Determine the maximum stress 
+*dim,rea,array,nset+1,3
+
+seltol,1e-8
+nsel,,loc,x,minx ! select all the nodes from the left boundary
+*vget,sel_l,node,1,nsel
+nsel,,loc,x,maxx ! select all the nodes from the left boundary
+*vget,sel_r,node,1,nsel
+nsel,a,loc,x,minx ! select all the nodes from the left boundary
+
+
+esel,type,1
+nsle
+!inres,nsol,rsol
+!
+subset,,,,,,,nset-1
+*get,tm,active,,set,time
+    *vmask,sel_r(1)
+    *vget,rux,node,,u,x ! get displacements
+    *vmask,sel_r(1)
+    *vscfun,imin,lmin,rux  ! get the maximum displacement
+
+    subset,first
+    *do,i,2,nset+1
+        rea(i,1) = ux(imin)
+        *vmask,sel_l(1)
+        *vget,reac,node,,rf,fx   ! get reactions
+        *vmask,sel_l(1)
+        *vfact,-1
+        *vscfun,rea(i,2),sum,reac  ! calculate resultant
+        rea(i,3) = i - 1
+        subset,next
+    *enddo
+    !*vfact,1/len*100
+    !*vfun,rea(1,1),copy,rea(1,1) ! scale the first column 
+
+    alls
+    inres,nsol,misc,rsol
+ ! --------------- Find the max stress
+    *vscfun,mins,lmin,rea(1,2)
+    set,,,,,,,rea(mins,3)
+ 
+
+
+esel,type,1
+*get,eMax,elem,0,count
+nsel,s,u,sum,0,0
+esln,u,1
+
+etable,f1,smisc,1   
+etable,a1,smisc,13
+etable,f2,smisc,14  
+etable,a2,smisc,26
+
+! Export energy state of the beam
+etable,ee,smisc,28 ! Elongation energy
+etable,be,smisc,29 ! Bending energy
+etable,te,smisc,30 ! Torsion energy
+etable,se,smisc,31 ! Shear energy
+etable,py,smisc,32 ! Plastic work
+
+! --- a1 = 1/a1
+sexp,a1,a1,,-1
+! --- a2 = 1/a2
+sexp,a2,a2,,-1
+! --- s1 = f1/a1
+smult,s1,f1,a1
+! --- s2 = f2/a2
+smult,s2,f2,a2
+! --- s = (s1 + s2)/2
+sadd,s,s1,s2,0.5,0.5
+sadd,f,f1,f2,0.5,0.5
+
+*del,sel
+*vget,sel,elem,,esel
+
+*dim,oPStr,array,eMax,10
+*vmask,sel(1)
+*vget,oPStr(1,1),elem,,ELIST
+*vmask,sel(1)
+*vget,oPStr(1,2),elem,,attr,real
+*vmask,sel(1)
+*vget,oPStr(1,3),elem,,etab,f
+*vabs,1
+*vmask,sel(1)
+*VGET,oPStr(1,4),elem,,geom
+*vmask,sel(1)
+*vget,oPStr(1,5),elem,,attr,mat
+*vmask,sel(1)
+*vget,oPStr(1,6),elem,,etab,py
+*vmask,sel(1)
+*vget,oPStr(1,7),elem,,etab,ee
+*vmask,sel(1)
+*vget,oPStr(1,8),elem,,etab,be
+*vmask,sel(1)
+*vget,oPStr(1,9),elem,,etab,te
+*vmask,sel(1)
+*vget,oPStr(1,10),elem,,etab,se
+
+
+
+! ********** Write data to CSV
+*del,afnm
+/inquire,afnm,jobname
+namx = '%afnm(1)%_eState'
+
+*MWRITE,oPStr(1,1),namx,csv,,JIK,10,eMax,1
+(12f12.3) 
+
+
+!*vmask,sel(1)
+!/out,axialForce,hst
+!*vwrite,oPStr(1,1)
+!(F16.8,F16.8,F16.8,F16.8)
+!/out
+
+*del,sel
+*del,sa
+etabel,eras
+alls

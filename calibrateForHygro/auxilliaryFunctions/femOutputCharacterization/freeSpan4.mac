@@ -1,0 +1,143 @@
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+! spanLength.mac
+!
+! This macro selects all of the contact elements and assembles the following
+! data:
+! 1. Contact status
+! 2. Fractured status
+! 3. X position
+! 4. Y position
+! 5. Z position
+! 6. Beam connected to point (master)
+! 7. In contact with beam (currently) (slave)
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+resume
+/POST1  
+!SET,,, ,,, ,2 !SET,LAST
+!SET,PREVIOUS
+
+! --- get the fracture data on the first step
+set,first
+*get,nset,active,,set,nset
+
+
+! Determine the maximum stress 
+*dim,rea,array,nset+1,3
+
+seltol,1e-8
+nsel,,loc,x,minx ! select all the nodes from the left boundary
+*vget,sel_l,node,1,nsel
+nsel,,loc,x,maxx ! select all the nodes from the left boundary
+*vget,sel_r,node,1,nsel
+nsel,a,loc,x,minx ! select all the nodes from the left boundary
+
+
+esel,type,1
+nsle
+inres,nsol,rsol
+subset,,,,,,,nset-1
+*get,tm,active,,set,time
+    *vmask,sel_r(1)
+    *vget,rux,node,,u,x ! get displacements
+    *vmask,sel_r(1)
+    *vscfun,imin,lmin,rux  ! get the maximum displacement
+
+    subset,first
+    *do,i,2,nset+1
+        rea(i,1) = ux(imin)
+        *vmask,sel_l(1)
+        *vget,reac,node,,rf,fx   ! get reactions
+        *vmask,sel_l(1)
+        *vfact,-1
+        *vscfun,rea(i,2),sum,reac  ! calculate resultant
+        rea(i,3) = i - 1
+        subset,next
+    *enddo
+    *vfact,1/len*100
+    *vfun,rea(1,1),copy,rea(1,1) ! scale the first column 
+
+    alls
+    inres,nsol,misc,rsol
+ ! --------------- Find the max stress
+    *vscfun,mins,lmin,rea(1,2)
+    set,,,,,,,rea(mins,3)
+
+set,first
+
+! ********** Select contact elements, generate ETABLE structures with information.
+allsel
+esel,s,type,,3
+etable,cvec,SMISC,1
+etable,cfra,SMISC,2
+etable,cx,SMISC,3
+etable,cy,SMISC,4
+etable,cz,SMISC,5
+etable,me,SMISC,7
+etable,de,SMISC,8
+
+*dim,DTEMP,array,ema3,1
+
+
+! ********** Create and fill a regular array with the data
+allsel
+esel,s,type,,1
+*get,ema1,elem,0,COUNT ! Find total number of elements.
+
+
+allsel
+*get,emax,elem,0,num,maxd ! Find total number of elements.
+esel,s,type,,3
+*get,ema3,elem,0,COUNT ! Find total number of elements.
+*dim,DEXP,array,ema3,10
+allsel
+CCC=1
+*do,xLoop,ema1+1,emax,2
+	!*get,tytemp,elem,xLoop,attr,type
+	!*if,tytemp,eq,3,then
+		!/com, Entered,%xLoop%
+		*get, DEXP(CCC,1),elem,xLoop,attr,real 		! Contact
+		*get, DEXP(CCC,2),etab,    1,elem,xLoop 		! In contact status
+		*get, DEXP(CCC,3),etab,    2,elem,xLoop		! Damage
+		*get, DEXP(CCC,4),etab,    3,elem,xLoop		! X position
+		*get, DEXP(CCC,5),etab,    4,elem,xLoop		! Y position
+		*get, DEXP(CCC,6),etab,    5,elem,xLoop		! Z position
+
+		!*get, DEXP(CCC,8),etab,    7,elem,xLoop		! 
+		*get, DEXP(CCC,9),etab,    6,elem,xLoop		! Get the element number (master side)
+		*get,DEXP(CCC,10),etab,    7,elem,xLoop		! Get the element number (slave side)
+
+		
+		! Fiber index
+		esel,s,elem,,xLoop
+		nsle,s
+		esln,s
+		esel,r,type,,1
+		
+		*get,ETP,elem,0,num,max
+		*get,DEXP(CCC,7),elem,ETP,attr,real ! Get the beam number
+		allsel
+		
+
+		! Get fiber index of the slave side. 
+		*if,DEXP(CCC,2),gt,0,then
+			!sTEMP = DEXP(CCC,8)
+			*get,DEXP(CCC,8),elem,DEXP(CCC,10),attr,real
+		*else
+			DEXP(CCC,8) = 0
+		*endif
+
+		CCC = CCC+1
+	!*endif
+*enddo
+
+
+*del,afnm
+/inquire,afnm,jobname
+namx = '%afnm(1)%nodalData'
+
+
+! ********** Write data to CSV
+*MWRITE,DEXP(1,1),'%afnm(1)%_bondData',csv,,JIK,10,ema3,1
+(12f12.3) 

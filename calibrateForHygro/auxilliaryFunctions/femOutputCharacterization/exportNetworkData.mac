@@ -1,0 +1,106 @@
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+! exportNetworkData.mac
+!
+! This script exports data about the finished network. This is different from 
+! the network created by the network generation algorithm because it exports 
+! what was actually submitted to the solver. This means
+!
+! - Loose ends have been dropped
+! - Element, nodal numbering has been condensed
+! - The network has been cut, resulting in truncated fibers
+!
+!
+fini
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Fourth step, get the material data
+resume
+/prep7
+allsel
+*get,mmax,mat,0,count ! Find the number of materials to be exported
+mmax = mmax-1 ! The last material is for contact elements
+
+*dim,mExp,array,mmax,2 ! X columns : [IDX EX]
+
+*do,xLoop,1,mmax
+	mExp(xLoop,1) = xLoop ! Material number
+	*get,mExp(xLoop,2),ex,xLoop,temp,0
+*enddo
+
+
+/POST1  
+SET,first ! Load the first time step solved.
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! First step, get the nodal data. 
+allsel
+esel,s,type,,1 ! Select only beam elements
+nsle,s,all
+
+*get,nmax,node,0,count ! Get the number of nodes to be exported
+*dim,nExp,array,nmax,4 ! 4 columns: [ IDX X Y Z ]
+
+*VGET,nExp(1,1),node,,nlist
+*vget,nExp(1,2),node,,loc,x
+*vget,nExp(1,3),node,,loc,y
+*vget,nExp(1,4),node,,loc,z
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Second step, get the element connectivity data
+allsel
+esel,s,type,,1
+*get,emax,elem,0,count
+*dim,eExp,array,emax,6 ! 6 columns : [ IDX N1 N2 N3 REAL MAT]
+
+*VGET,eExp(1,1),elem,,elist
+*VGET,eExp(1,2),elem,,node,1
+*VGET,eExp(1,3),elem,,node,2
+*VGET,eExp(1,4),elem,,node,3
+*VGET,eExp(1,5),elem,,attr,real
+*VGET,eExp(1,6),elem,,attr,mat
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Third step, get the real numbers
+allsel
+esel,s,type,,1
+*vscfun,rmax,max,eExp(1,5) ! Find the maximum real set concerning the fibers (the rest are about the contacts)
+*dim,rExp,array,rmax,5 ! X columns : [IDX TYPE WIDTH HEIGHT THICKNESS]
+
+*vfill,rExp(1,1),ramp,1,1
+*vget,rExp(1,2),rcon,1,const,1
+*vget,rExp(1,3),rcon,1,const,2
+*vget,rExp(1,4),rcon,1,const,3
+*vget,rExp(1,5),rcon,1,const,4
+
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Export phase: push all the data to csv files
+
+*del,afnm
+/inquire,afnm,jobname
+namx = '%afnm(1)%nodalData'
+
+! Nodal data export
+*MWRITE,nExp(1,1),'%afnm(1)%_nodalData',csv,,JIK,4,nMax,1
+(12f12.3) 
+
+! Element data export
+*MWRITE,eExp(1,1),'%afnm(1)%_elementData',csv,,JIK,6,eMax,1
+(12f12.3) 
+
+! Real data export
+*MWRITE,rExp(1,1),'%afnm(1)%_realData',csv,,JIK,5,rmax,1
+(12f12.3) 
+
+! Material data export
+*MWRITE,mExp(1,1),'%afnm(1)%_materialData',csv,,JIK,2,mmax,1
+(12f12.3) 
+
+*del,nExp
+*del,eExp
+*del,rExp
+*del,mExp
+allsel

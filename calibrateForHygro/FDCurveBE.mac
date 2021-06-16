@@ -1,0 +1,257 @@
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Force displacment output macro
+! 
+! This macro outputs the reaction force and the enforced displacment in all 
+! directions from Fibnet. 
+
+fini
+/cle
+/inquire,there,exist,%ARG1%_%ARG2%,rea
+*if,there,eq,1,then
+!    *return
+*endif
+
+/inquire,there,exist,%ARG1%_%ARG2%,rst
+*if,there,ne,1,then
+!    *return
+*endif
+
+*get,whois,parm,ARG1,type
+*get,whois2,parm,ARG2,type
+*if,whois,eq,3,and,ARG2,lt,0,then
+   /out,ARG1,out,,APPEND
+   /filname,ARG1
+*elseif,whois,eq,3,and,whois2,eq,0,then
+   /out,%ARG1%_%ARG2%,out,,APPEND
+   /filname,%ARG1%_%ARG2%
+*endif
+
+resume
+/post1
+file
+
+inres,misc,rsol
+set,first
+csys,0
+nsle,,corner
+*get,maxx,node,,mxloc,x        ! maximum x all over the model
+*get,minx,node,,mnloc,x        ! minimum x all over the model
+*get,maxy,node,,mxloc,y        ! maximum y all over the model
+*get,miny,node,,mnloc,y        ! minimum y all over the model
+*get,maxz,node,,mxloc,z        ! maximum y all over the model
+*get,minz,node,,mnloc,z        ! minimum y all over the model
+nall
+
+*get,nset,active,,set,nset
+*dim,rea,table,nset+1,24
+*dim,tmp,array,nset+1,2
+
+seltol,1e-8
+nsel,,loc,x,minx ! select all the nodes from the left boundary
+*vget,sel_lA,node,1,nsel
+nsel,,loc,x,maxx ! select all the nodes from the left boundary
+*vget,sel_rA,node,1,nsel
+
+nsel,,loc,y,miny ! select all the nodes from the left boundary
+*vget,sel_lB,node,1,nsel
+nsel,,loc,y,maxy ! select all the nodes from the left boundary
+*vget,sel_rB,node,1,nsel
+
+
+!nsel,a,loc,x,minx ! select all the nodes from the left boundary
+allsel
+
+*do,i,2,nset+1
+    ! Structure of data
+    ! FIBER A                               FIBER B
+    ! LEFT              RIGHT               ! LEFT              RIGHT
+    ! RX RY RZ UX UY UZ RX RY RZ UX UY YZ   ! RX RY RZ UX UY UZ RX RY RZ UX UY YZ 
+    !  1  2  3  4  5  6  7  8  9 10 11 12   ! 13 14 15 16 17 18 19 20 21 22 23 24
+    ! Total size, 24 columns.
+
+    ! X Values (right and left)
+    *vmask,sel_lA(1)                         ! Select left boundary
+    *vget,reac,node,,rf,fx                  ! Get reactions
+    *vmask,sel_lA(1)
+    *vfact,-1
+    *vscfun,rea(i,1),sum,reac               ! Calculate resultant
+
+    *vmask,sel_rA(1)                         ! Select right boundary
+    *vget,reac,node,,rf,fx                  ! get reactions
+    *vmask,sel_rA(1)
+    *vscfun,rea(i,7),sum,reac               ! calculate resultant
+
+    *vmask,sel_lA(1)                         ! Select left boundary
+    *vget,reac,node,,rf,fy                  ! Get reactions
+    *vmask,sel_lA(1)
+    *vfact,-1
+    *vscfun,rea(i,2),sum,reac               ! Calculate resultant
+
+    *vmask,sel_rA(1)                         ! Select right boundary
+    *vget,reac,node,,rf,fy                  ! get reactions
+    *vmask,sel_rA(1)
+    *vscfun,rea(i,8),sum,reac               ! calculate resultant
+
+    *vmask,sel_lA(1)                         ! Select left boundary
+    *vget,reac,node,,rf,fz                  ! Get reactions
+    *vmask,sel_lA(1)
+    *vfact,-1
+    *vscfun,rea(i,3),sum,reac               ! Calculate resultant
+
+    *vmask,sel_rA(1)                         ! Select right boundary
+    *vget,reac,node,,rf,fz                  ! get reactions
+    *vmask,sel_rA(1)
+    *vscfun,rea(i,9),sum,reac               ! calculate resultant
+
+    ! X Values (right and left)                                         OBS OBS OBS OBS OBS OBS OBS OBS OBS 
+    *vmask,sel_lB(1)                         ! Select left boundary
+    *vget,reac,node,,rf,fx                  ! Get reactions
+    *vmask,sel_lB(1)
+    *vfact,-1
+    *vscfun,rea(i,13),sum,reac               ! Calculate resultant
+
+    *vmask,sel_rB(1)                         ! Select right boundary
+    *vget,reac,node,,rf,fx                  ! get reactions
+    *vmask,sel_rB(1)
+    *vscfun,rea(i,19),sum,reac               ! calculate resultant
+
+    *vmask,sel_lB(1)                         ! Select left boundary
+    *vget,reac,node,,rf,fy                  ! Get reactions
+    *vmask,sel_lB(1)
+    *vfact,-1
+    *vscfun,rea(i,14),sum,reac               ! Calculate resultant
+
+    *vmask,sel_rB(1)                         ! Select right boundary
+    *vget,reac,node,,rf,fy                  ! get reactions
+    *vmask,sel_rB(1)
+    *vscfun,rea(i,20),sum,reac               ! calculate resultant
+
+    *vmask,sel_lB(1)                         ! Select left boundary
+    *vget,reac,node,,rf,fz                  ! Get reactions
+    *vmask,sel_lB(1)
+    *vfact,-1
+    *vscfun,rea(i,15),sum,reac               ! Calculate resultant
+
+    *vmask,sel_rB(1)                         ! Select right boundary
+    *vget,reac,node,,rf,fz                  ! get reactions
+    *vmask,sel_rB(1)
+    *vscfun,rea(i,21),sum,reac               ! calculate resultant
+    
+    subset,next
+*enddo
+
+esel,type,1
+nsle
+inres,nsol
+subset,,,,,,,nset-1
+*get,tm,active,,set,time
+
+
+! Select 1 node in the center and figure out how it is moving
+
+!allsel
+!nsel,s,loc,x,minx
+!nsel,r,loc,y,0.25*(miny+maxy)+hFib,0.75*(miny+maxy)+hFib
+!nsel,r,loc,z,40!0.5*(minz+maxz)+hFib
+!*get,nAmin,node,0,num,min
+
+!nsel,s,loc,x,maxx
+!nsel,r,loc,y,0.25*(miny+maxy)+hFib,0.75*(miny+maxy)+hFib
+!nsel,r,loc,z,40!0.5*(minz+maxz)+hFib
+!*get,nAmax,node,0,num,min
+
+nAmin = node(minx,0.5*(miny+maxy),0)
+nAmax = node(maxx,0.5*(miny+maxy),0)
+allsel
+
+allsel
+
+nsel,s,loc,x,maxx
+nsel,r,loc,y,0
+nsel,r,loc,z,0
+*get,nBmin,node,0,num,min
+nsel,s,loc,x,minx
+nsel,r,loc,y,0
+nsel,r,loc,z,0
+*get,nBmax,node,0,num,min
+
+allsel
+csys,0
+
+!*vmask,sel_rA(1)
+!*vget,ruxA,node,,u,z! OBS OBS OBS OBSx ! get displacements
+!*vmask,sel_rA(1)
+!*vscfun,imaxA,lmax,ruxA  ! get the maximum displacement
+
+! 4 nodes need to be found : A1, A2, B1, B2
+!*vmask,sel_rB(1)
+!*vget,ruxB,node,,u,z! OBS OBS OBS OBSx ! get displacements
+!*vmask,sel_rB(1)
+!*vscfun,imaxB,lmax,ruxB ! get the maximum displacement
+
+
+
+!esel,none
+!nsel,,,,imax
+allsel
+subset,first
+umax = 0
+*do,i,2,nset+1
+    *set,fs,ux(nAmin)
+    *set,rea(i,4),fs
+    *set,fs,uy(nAmin)
+    *set,rea(i,5),fs
+    *set,fs,uz(nAmin)
+    *set,rea(i,6),fs
+
+    *set,fs,ux(nAmax)
+    *set,rea(i,10),fs
+    *set,fs,uy(nAmax)
+    *set,rea(i,11),fs
+    *set,fs,uz(nAmax)
+    *set,rea(i,12),fs
+
+    *set,fs,ux(nBmin)
+    *set,rea(i,16),fs
+    *set,fs,uy(nBmin)
+    *set,rea(i,17),fs
+    *set,fs,uz(nBmin)
+    *set,rea(i,18),fs
+
+    *set,fs,ux(nBmax)
+    *set,rea(i,22),fs
+    *set,fs,uy(nBmax)
+    *set,rea(i,23),fs
+    *set,fs,uz(nBmax)
+    *set,rea(i,24),fs
+
+
+    *get,tm,active,,set,time
+    subset,next
+*enddo
+!fs = umax/len*100
+!*vfact,1/len*100
+!*vfun,rea(1,1),copy,rea(1,1) ! scale the first column 
+
+
+
+alls
+
+inres,misc
+set,first
+
+/prep7
+
+*del,afnm
+/inquire,afnm,jobname
+namx = '%afnm(1)%'
+/out,namx,fodi
+*vwrite,rea(1,1),rea(1,2),rea(1,3),rea(1,4),rea(1,5),rea(1,6),rea(1,7),rea(1,8),rea(1,9),rea(1,10),rea(1,11),rea(1,12)
+(12F22.9)
+/out
+/out,namx,fodi2
+*vwrite,rea(1,13),rea(1,14),rea(1,15),rea(1,16),rea(1,17),rea(1,18),rea(1,19),rea(1,20),rea(1,21),rea(1,22),rea(1,23),rea(1,24)
+(12F22.9)
+/out
+
+!*del,all
